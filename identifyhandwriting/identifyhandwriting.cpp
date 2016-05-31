@@ -177,7 +177,6 @@ Mat CorrectImg(vector<Point2f> points, Mat img, Mat tempimg) {
 	Rect myROI(lx, ly, width, height);
 	Mat CorrectImage = perspectiveImg(myROI);
 	imshow("CorrectImage", CorrectImage);
-	imwrite("4.jpg", CorrectImage);
 	return CorrectImage;
 }
 int otsu(Mat img) {
@@ -264,24 +263,82 @@ Mat getotsuimg(Mat srcimg) {
 	cvWaitKey(0);
 	return img;
 }
+Mat getImg() {
+	Mat srcimg = imread("temp.jpg");
+	return srcimg;
+}
 void segmentation() {
-	IplImage* Igray = 0;
-	IplImage* It = 0;
-	IplImage* Iat;
-	Igray = cvLoadImage("4.jpg", CV_LOAD_IMAGE_GRAYSCALE);
-	It = cvCreateImage(cvSize(Igray->width, Igray->height), IPL_DEPTH_8U, 1);
-	Iat = cvCreateImage(cvSize(Igray->width, Igray->height), IPL_DEPTH_8U, 1);
-	cvThreshold(Igray, It, 150, 255, CV_THRESH_BINARY);
-	cvAdaptiveThreshold(Igray, Iat, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 35);
+	IplImage* tempimg = cvLoadImage("temp.jpg", CV_LOAD_IMAGE_GRAYSCALE);
+	IplImage* img = cvCreateImage(cvSize(tempimg->width, tempimg->height), IPL_DEPTH_8U, 1);
+	cvAdaptiveThreshold(tempimg, img, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 7);
 	cvNamedWindow("adaptiveThresh", 1);
-	cvShowImage("adaptiveThresh", Iat);
-	cvWaitKey(0);
-	cvReleaseImage(&Iat);
+	cvSaveImage("temp.jpg", img);
+	cvShowImage("seimg",img);
 	cvDestroyWindow("adaptiveThresh");
+	cvReleaseImage(&img);
+}
+Mat rotation(Mat srcImg, double angle) {
+	Mat tempImg;
+	CV_Assert(!srcImg.empty());
+	float radian = (float)(angle / 180.0 * CV_PI);
+	//填充图像使其符合旋转要求
+	int uniSize = (int)(max(srcImg.cols, srcImg.rows)* 1.414);
+	int dx = (int)(uniSize - srcImg.cols) / 2;
+	int dy = (int)(uniSize - srcImg.rows) / 2;
+	copyMakeBorder(srcImg, tempImg, dy, dy, dx, dx, BORDER_CONSTANT);
+	//旋转中心
+	Point2f center((float)(tempImg.cols / 2), (float)(tempImg.rows / 2));
+	Mat affine_matrix = getRotationMatrix2D(center, angle, 1.0);
+	//旋转
+	warpAffine(tempImg, tempImg, affine_matrix, tempImg.size());
+	//旋转后的图像大小
+	float sinVal = fabs(sin(radian));
+	float cosVal = fabs(cos(radian));
+	Size targetSize((int)(srcImg.cols * cosVal + srcImg.rows * sinVal),
+		(int)(srcImg.cols * sinVal + srcImg.rows * cosVal));
+
+	//剪掉四周边框
+	int x = (tempImg.cols - targetSize.width) / 2;
+	int y = (tempImg.rows - targetSize.height) / 2;
+	Rect rect(x, y, targetSize.width, targetSize.height);
+	tempImg = Mat(tempImg, rect);
+	imwrite("temp.jpg", tempImg);
+	//imshow("Show", tempImg);
+	return tempImg;
+}
+Mat Erosion(Mat srcimg) {
+	Mat erodeimg;
+	Mat element = getStructuringElement(MORPH_RECT, Size(3, 3));
+	/// 腐蚀操作
+	erode(srcimg, erodeimg, element);
+	imshow("Erosion Demo", erodeimg);
+	return erodeimg;
+}
+Mat Dilation(Mat srcimg)
+{
+	Mat dilatimg;
+	Mat element = getStructuringElement(MORPH_RECT, Size(2, 2));
+	/// 膨胀操作
+	dilate(srcimg, dilatimg, element);
+	imshow("Dilation Demo", dilatimg);
+	return dilatimg;
+}
+Mat ReverseImg(Mat img) {
+	Mat srcimg = img.clone();
+	int h = srcimg.rows;
+	int w = srcimg.cols;
+	cout << h << " " << w << endl;
+	circle(srcimg, Point2f(h, w), 3, Scalar(255, 0, 0), 1);
+	for (int i = 0; i < h; i++) {
+		for (int j = 0; j < 3*w; j++) {
+			srcimg.at<uchar>(i, j) = 255 - srcimg.at<uchar>(i, j);
+		}
+	}
+	return srcimg;
 }
 int main()
 {
-	Mat srcImg = imread("2.jpg");
+	Mat srcImg = imread("1.jpg");
 	Mat blurImg, grayImg, dstImg, tempImg, cornerImg;
 	int width = srcImg.cols;
 	int height = srcImg.rows;
@@ -292,8 +349,14 @@ int main()
 	vector<Lines> lines = Findlines(image);
 	vector<Point2f> points = findintersection(lines, image);
 	Mat corrimg = CorrectImg(points, image, tempImg);
-	//Mat otsuimg = getotsuimg(corrimg);
-    segmentation();
+	Mat roimg = rotation(corrimg, -90);
+	segmentation();
+	Mat reimg = ReverseImg(getImg());
+	//
+	//Mat eroimg = Erosion(getImg());
+	//Mat diaimg = Dilation(getImg());
+	//Mat reimg = ReverseImg(eroimg);
+	imshow("reverse", reimg);
 	waitKey(0);
 	return 0;
 }
