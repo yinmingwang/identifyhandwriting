@@ -176,106 +176,18 @@ Mat CorrectImg(vector<Point2f> points, Mat img, Mat tempimg) {
 	warpPerspective(rotatedImg, perspectiveImg, perspectiveMatrix, perspectiveImg.size());
 	Rect myROI(lx, ly, width, height);
 	Mat CorrectImage = perspectiveImg(myROI);
+	Mat ReImg(CorrectImage, Rect(10, 10, CorrectImage.cols - 20, CorrectImage.rows-20));
 	imshow("CorrectImage", CorrectImage);
-	return CorrectImage;
+	return ReImg;
 }
-int otsu(Mat img) {
-	int histogram[256] = { 0 };
-	double probability[256] = { 0.0 };
-	/*计算灰度直方图*/
-	for (int i = 0; i < img.rows; i++) {
-		for (int j = 0; j < img.cols; j++) {
-			histogram[img.at<uchar>(i, j)]++;
-		}
-	}
-	/*求出每个灰度值出现的比例*/
-	for (int i = 0; i < 256; i++) {
-		probability[i] = histogram[i] / ((img.rows*img.cols) + 0.0);
-	}
-	double averagelevel = 0.0;
-	/*求出总的平均灰度*/
-	for (int i = 0; i < 256; i++) {
-		averagelevel += i*probability[i];
-	}
 
-	double max = 0.0;
-	int maxthreshold = 0;
-	for (int i = 0; i < 256; i++) {
-		double p1 = 0.0;
-		double p2 = 0.0;
-		double averageuj = 0.0;
-		/*计算前景的比例和平均灰度*/
-		for (int j = 0; j <= i; j++) {
-			p1 += probability[j];  //前景点数占图像比例
-			averageuj += j*probability[j];
-		}
-		double m1 = averageuj / p1;//前景的平均灰度
-		p2 = 1 - p1; //背景点数占图像比例
-		double m2 = (averagelevel - averageuj) / p2;//背景的平均灰度
-		double g = p1*p2*(m1 - m2)*(m1 - m2); //间内方差
-		//cout << g << endl;
-		if (g > max) {
-			max = g; //求出最大间内方差
-			maxthreshold = i; //求出使得间内方差最大的阈值
-		}
-	}
-	//cout << maxthreshold << endl;
-	return maxthreshold;
-}
-Mat getotsuimg(Mat srcimg) {
-	Mat img;
-	cvtColor(srcimg, img, CV_RGB2GRAY);
-	//绘制直方图
-	MatND hist;
-	int nbins = 256;
-	int hsize[] = { nbins };
-	float range[] = { 0, 256 };
-	const float* ranges[] = { range };
-	calcHist(&img, 1, 0, Mat(), hist, 1, hsize, ranges);
-	int hist_w = 512;
-	int hist_h = 400;
-	int bin_w = cvRound((double)hist_w / nbins);
-	Mat histImg(hist_h, hist_w, CV_32FC3, Scalar(0, 0, 0));
-	normalize(hist, hist, 0, histImg.rows, NORM_MINMAX, -1, Mat());
-	for (int i = 1; i < nbins; ++i) {
-		line(histImg, Point(bin_w * (i - 1), hist_h - cvRound(hist.at<float>(i - 1))),
-			Point(bin_w * (i), hist_h - cvRound(hist.at<float>(i))),
-			Scalar(255, 255, 255), 2, 8, 0);
-	}
-
-	int threshold = otsu(img);
-	string namehist = "imghist";
-	line(histImg, Point(bin_w * threshold, 0), Point(bin_w * threshold, hist_h), Scalar(0, 0, 255), 1, CV_AA);
-	imshow(namehist, histImg); //绘制直方图
-	//imwrite(histpath,histImg);
-	/*利用求出的阈值二值化图像*/
-	for (int i = 0; i < img.rows; i++) {
-		for (int j = 0; j < img.cols; j++) {
-			if (img.at<uchar>(i, j) > threshold-40) {
-				img.at<uchar>(i, j) = 255;
-			}
-			else {
-				img.at<uchar>(i, j) = 0;
-			}
-		}
-	}
-	imshow("img", img);
-	cvWaitKey(0);
-	return img;
-}
-Mat getImg() {
-	Mat srcimg = imread("temp.jpg");
-	return srcimg;
-}
-void segmentation() {
-	IplImage* tempimg = cvLoadImage("temp.jpg", CV_LOAD_IMAGE_GRAYSCALE);
-	IplImage* img = cvCreateImage(cvSize(tempimg->width, tempimg->height), IPL_DEPTH_8U, 1);
-	cvAdaptiveThreshold(tempimg, img, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 7);
-	cvNamedWindow("adaptiveThresh", 1);
-	cvSaveImage("temp.jpg", img);
-	cvShowImage("seimg",img);
-	cvDestroyWindow("adaptiveThresh");
-	cvReleaseImage(&img);
+Mat segmentation(Mat srcimg) {
+	Mat grayimg;
+	Mat seimg;
+	cvtColor(srcimg, grayimg, CV_BGR2GRAY);
+	adaptiveThreshold(grayimg, seimg, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, CV_THRESH_BINARY_INV, 33, 5);
+	//imshow("seimg", seimg);
+	return seimg;
 }
 Mat rotation(Mat srcImg, double angle) {
 	Mat tempImg;
@@ -302,7 +214,6 @@ Mat rotation(Mat srcImg, double angle) {
 	int y = (tempImg.rows - targetSize.height) / 2;
 	Rect rect(x, y, targetSize.width, targetSize.height);
 	tempImg = Mat(tempImg, rect);
-	imwrite("temp.jpg", tempImg);
 	//imshow("Show", tempImg);
 	return tempImg;
 }
@@ -323,65 +234,6 @@ Mat Dilation(Mat srcimg)
 	imshow("Dilation Demo", dilatimg);
 	return dilatimg;
 }
-Mat ReverseImg(Mat img) {
-	Mat srcimg = img.clone();
-	int h = srcimg.rows;
-	int w = srcimg.cols;
-	cout << h << " " << w << endl;
-	circle(srcimg, Point2f(h, w), 3, Scalar(255, 0, 0), 1);
-	for (int i = 0; i < h; i++) {
-		for (int j = 0; j < 3*w; j++) {
-			srcimg.at<uchar>(i, j) = 255 - srcimg.at<uchar>(i, j);
-		}
-	}
-	return srcimg;
-}
-Mat getindividual(Mat srcimg, double minarea, double whRatio) {
-	vector<vector<Point> > contours;    //轮廓数组（非矩形数组），每个轮廓是一个Point型的vector
-	vector<Vec4i> hierarchy;
-	findContours(srcimg, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-	double maxarea = 0;
-	int maxAreaIdx = 0;
-
-	for (int i = 0; i<contours.size(); i++)
-	{
-
-		double tmparea = fabs(contourArea(contours[i]));
-		if (tmparea>maxarea)
-		{
-			maxarea = tmparea;
-			maxAreaIdx = i;
-			continue;
-		}
-
-		if (tmparea < minarea)
-		{
-			//删除面积小于设定值的轮廓  
-			contours.erase(contours.begin() + i);
-			std::wcout << "delete a small area" << std::endl;
-			continue;
-		}
-		//计算轮廓的直径宽高  
-		Rect aRect = boundingRect(contours[i]);
-		if ((aRect.width / aRect.height)<whRatio)
-		{
-			//删除宽高比例小于设定值的轮廓  
-			contours.erase(contours.begin() + i);
-			std::wcout << "delete a unnomalRatio area" << std::endl;
-			continue;
-		}
-	}
-	/// Draw contours,彩色轮廓  
-	Mat dst = Mat::zeros(srcimg.size(), CV_8UC3);
-	for (int i = 0; i< contours.size(); i++)
-	{
-		//随机颜色  
-		Scalar color = Scalar(255,255,255);
-		drawContours(dst, contours, i, color, 2, 8, hierarchy, 0, Point());
-	}
-	imshow("con", dst);
-	return dst;
-}
 int main()
 {
 	Mat srcImg = imread("1.jpg");
@@ -395,15 +247,8 @@ int main()
 	vector<Lines> lines = Findlines(image);
 	vector<Point2f> points = findintersection(lines, image);
 	Mat corrimg = CorrectImg(points, image, tempImg);
-	Mat roimg = rotation(corrimg, -90);
-	segmentation();
-	//
-	Mat eroimg = Erosion(getImg());
-	Mat reimg = ReverseImg(eroimg);
-	Mat conimg = getindividual(reimg,5,0.6);
-	//Mat diaimg = Dilation(getImg());
-	//Mat reimg = ReverseImg(eroimg);
-	imshow("reverse", reimg);
+	Mat seImg = segmentation(corrimg);
+	Mat roimg = rotation(seImg, -90);
 	waitKey(0);
 	return 0;
 }
